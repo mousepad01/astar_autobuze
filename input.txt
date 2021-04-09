@@ -1,0 +1,13 @@
+08:00 16:00
+100 1.5lei 15min 4min "Gandaceni","Ciuperceni","Parcul lui Gigel","Dealul melcului schiop","Bazinul Baldabac","Piata 3 castraveti","Strada Pisicilor","Strada Aricilor","Spitalul Hapciu","Albinuta lenesa","Academia furnicilor"
+200 3lei 12min 7min "Strada Aricilor","Strada Pisicilor","Piata 3 castraveti","Soseaua papucilor","Hotel Gogonel"
+300 4lei 10min 4min "Dealul melcului schiop","Soriceii de sus","Expozitia de bondari","Strada Aricilor","Strada Pisicilor","Piata 3 castraveti","Hotel Gogonel","Albinuta lenesa","Spitalul Hapciu"
+400 8lei 20min 5min "Castelul cu omizi","Parcul Bobarnac,"Ciuperceni","Expozitia de bondari","Soriceii de sus","Piata 3 castraveti","Soseaua papucilor","Hotel Gogonel","Strada Aricilor"
+500 2lei 30min 7min "Ciuperceni","Parcul lui Gigel","Soriceii de sus","Expozitia de bondari","Strada Aricilor","Hotel Gogonel","Piata 3 castraveti","Bazinul Baldabac","Dealul melcului schiop","Lacul Brotacei frumoși"
+600 4lei 25min 10min "Parcul Bobarnac","Ciuperceni","Expozitia de bondari","Soriceii de sus","Dealul melcului schiop","Bazinul Baldabac","Soseaua papucilor","Academia furnicilor"
+700 5lei 25min 8min "Grota secreta","Lacul Brotacei frumoși","Poteca bantuita","Poarta orasului","Parcul lui Gigel"
+3 oameni
+Ionel 100lei "Hotel Gogonel","Parcul lui Gigel","Albinuta lenesa","Expozitia de bondari","Albinuta lenesa","Piata 3 castraveti"
+Gigel 80lei "Dealul melcului schiop","Soriceii de sus","Strada Pisicilor","Spitalul Hapciu","Soriceii de sus","Expozitia de bondari"
+Costica 55lei "Strada Aricilor","Poarta orasului","Expozitia de bondari","Dealul melcului schiop"
+
