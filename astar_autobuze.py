@@ -140,23 +140,54 @@ class BusType:
 
         l = len(self.route)
 
+        prevLocationName = None
+        currentLocationName = None
+        futureLocationName = None
+
         if reverse is True:
 
             i = -1
             while i >= -l:
-                yield self.route[i]
+
+                currentLocationName = self.route[i]
+                if i == -l:
+                    futureLocationName = prevLocationName
+                else:
+                    futureLocationName = self.route[i - 1]
+
+                yield (prevLocationName, currentLocationName, futureLocationName)
+
+                prevLocationName = currentLocationName
                 i -= 1
 
         while True:
 
             i = 0
             while i < l:
-                yield self.route[i]
+
+                currentLocationName = self.route[i]
+                if i == l - 1:
+                    futureLocationName = prevLocationName
+                else:
+                    futureLocationName = self.route[i + 1]
+
+                yield (prevLocationName, currentLocationName, futureLocationName)
+
+                prevLocationName = currentLocationName
                 i += 1
 
-            i = -1
+            i = -1      # TODO: fix :se dubleaza pozitia finala
             while i >= -l:
-                yield self.route[i]
+
+                currentLocationName = self.route[i]
+                if i == -l:
+                    futureLocationName = prevLocationName
+                else:
+                    futureLocationName = self.route[i - 1]
+
+                yield (prevLocationName, currentLocationName, futureLocationName)
+
+                prevLocationName = currentLocationName
                 i -= 1
 
 
@@ -165,9 +196,14 @@ class Location:
     def __init__(self, name):
 
         self.name = name
-        self.schedule = {}  # {minut: autobuz.id}
+        self.schedule = {}  # {minut: (autobuz.id, locatie anterioare, locatie urmatoare)}
+
+        self.buses = {}     # {bus.id: bus}
+                            # autobuzele care trec prin aceasta locatie
+                            # le as fi putut dedude din self.schedule, dar preprocesez pentru a optimiza timpul de rulare
 
 
+# voi avea doau tipuri de stari in care se afla persoana
 class Person:
 
     def __init__(self, name, money):
@@ -175,12 +211,39 @@ class Person:
         self.name = name
         self.money = money
         self.personalRoute = []  # [locatie.nume, ...]
+                                 # voi sterge locatiile pe masura ce sunt parcurse
 
-        self.timeLocationLeft = 0
-        self.currentBus = None
+        self.personalState = None   # daca se afla pe drum: "PE TRASEU"
+                                    # daca se afla in statie: "IN STATIE"
+
+        self.timeForArrival = 0   # timpul cat dureaza pana ajunge in urmatoarea statie
+        self.currentBus = None    # autobuzul curent, daca e pe traseu
+        self.nextLocationName = None
+        self.previousLocationName = None    # pentru a identifica complet in ce autobuz circula
+                                            # pentru a evita intersectia persoanelor
+
+        self.currentLocationName = None     # daca asteapta, statia curenta
         self.allowedBuses = {}  # pentru cazul cand asteapta in statie, si a refuzat sa ia un autobuz, il marchez cu false
                                 # {autobuz.id: True/False}
 
+        # PRECIZARI:
+        #
+        # cand o persoana este in statie si decide sa nu urce in autobuz,
+        # voi elimina din allowedBuses acel autobuz si in rest nu modific nimic
+        #
+        # cand o persoana este pe drum, ajunge intr-o statie si decide sa nu coboare
+        # persoana va fi considerata tot pe drum, dar se va modifica timeForArrival si next & previous LocationName
+        #
+        # cand o persoana este pe drum, ajunge intr-o statie si decide sa coboare
+        # voi seta timeForArrival, currentBus, next & prev LocationName pe 0 / None
+        # voi seta currentLocationName corespunzator (fostul nextLocationName)
+        # voi initializa allowedBuses cu toate autobuzele care trec prin acea locatie
+        # in plus, daca locatia este urmatoarea din person.personalRoute, elimin statia din personalRoute
+        #
+        # cand o persoana este in statie si decide sa urce
+        # setez allowedBuses pe {} (dict gol) si currentLocationName pe None
+        # setez corespunzator timeForArrival , etc...
+        # si scad din money pretul autobuzului in care urca
 
 class Info:
 
@@ -188,7 +251,7 @@ class Info:
     locations = {}  # {locatie.nume: locatie}
     persons = {}  # {persoana.nume: persoana}
 
-    START_TIME = 0
+    START_TIME = 0  # START_TIME si END_TIME intervalul zilei
     END_TIME = 0
 
     @classmethod
@@ -242,14 +305,22 @@ class Info:
                 r = bus.routeIterator()
                 for min2 in range(min, cls.END_TIME + 1, bus.timeBetweenLocations):
 
-                    locName = next(r)
-                    cls.locations[locName].schedule.update({min2: locName})
+                    (prevLocationName, currentLocationName, nextLocationName) = next(r)
+
+                    if bus.id not in cls.locations[currentLocationName].buses.keys():
+                        cls.locations[currentLocationName].buses.update({bus.id: bus})
+
+                    cls.locations[currentLocationName].schedule.update({min2: (bus.id, prevLocationName, nextLocationName)})
 
                 r = bus.routeIterator(reverse=True)
                 for min2 in range(min, cls.END_TIME + 1, bus.timeBetweenLocations):
 
-                    locName = next(r)
-                    cls.locations[locName].schedule.update({min2: locName})
+                    (prevLocationName, currentLocationName, nextLocationName) = next(r)
+
+                    if bus.id not in cls.locations[currentLocationName].buses.keys():
+                        cls.locations[currentLocationName].buses.update({bus.id: bus})
+
+                    cls.locations[currentLocationName].schedule.update({min2: (bus.id, prevLocationName, nextLocationName)})
 
             i += 1
 
@@ -291,7 +362,7 @@ class State:
     def __init__(self, currentMinute, activePersons):
 
         self.currentMinute = currentMinute
-        self.persons = activePersons  # [person, ...]
+        self.persons = activePersons  # [person, ...] - voi retine cate o copie a unui obiect de tip persoana pt fiecare state
         self.parentState = None
 
     def isFinalState(self):
@@ -299,32 +370,47 @@ class State:
 
     def nextStateGenerator(self):
 
-        # calculez cel mai apropiat moment de decizie dintre toate disponibile
+        # calculez cel mai apropiat moment de decizie dintre toate disponibile (ex daca sa coboare sau nu etc)
         # incepand cu momentul curent (self.currentMinute)
         # iau acea decizie da/ nu, dar daaca sunt mai multe minime
         # iau toate combinatiile posibile
 
+        # verificari pentru a vedea daca starea este valida/ mai poate fi extinsa
+
+        # verific daca nu s-a incheiat ziua
+        if self.currentMinute >= Info.END_TIME:
+            return None
+
+        # verific daca exista vreo persoana care a ramas fara bani dar mai are statii de parcurs
+        for person in self.persons:
+            if len(person.personalRoute) > 0 >= person.money:
+                return None
+
+        # verific daca exista vreo persoana care are allowedBuses gol
+        # adica daca a asteptat in statie si a refuzat toate autobuzele
+
+        # calculez cel mai apropiat eveniment (cele mai apropiate daca sunt mai multe cu timp minim)
+
         minDecisionTime = float('inf')
-        
+        personEventList = []    # lista in care voi retine momentele de decizie care sunt cele mai apropiate
+                                # va retine defapt persoanele, deducand evenimentul din starea lor
+                                # deci va fi o submultime a self.persons
 
+        # chair daca o decizie defapt nu e o decizie reala (ex nu poate urca in autobuz pentru ca e deja cineva acolo)
+        # tot il voi lua in calcul, si voi genera in cel mai rau caz o singura stare urmatoare
+        # acest fapt ma va interesa doar cand "iau decizia" (cand construiesc efectiv starile urmatoare)
+        # fac asta pentru a pastra logica pe fiecare stare cat mai simpla
 
+        # mai intai determin timpul minim de decizie
         for person in self.persons:
 
-            if person.currentBus is not None:  # cazul cand este pe drum
+            if person.personalState == "PE TRASEU":
+                if person.timeForArrival < minDecisionTime:
+                    minDecisionTime = person.timeForArrival
 
-                timeNextStop = self.currentMinute - person.timeLocationLeft
-                canLeaveBus = True
-
-                for otherPerson in self.persons:
-                    if otherPerson != person:
-
-                        if
-
+            elif person.personalState == "IN STATIE":
+                # in acest caz vad care autobuz va ajunge cel mai repede in statie
+                # indiferent daca are o persoana deja in el sau nu
 
 
 Info.parseInput()
-
-
-
-
-
