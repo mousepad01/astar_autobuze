@@ -513,7 +513,7 @@ class State:
         # iau doar una din deciziile cu timp minim
         # voi avea (cel mult) 2 succesori: cel in care evenimentul a avut loc (daca se poate),
         #                                  altul in care nu a avut loc
-
+        print(self.currentMinute)
         for personIndex in range(len(self.persons)):
 
             person = self.persons[personIndex]
@@ -530,9 +530,7 @@ class State:
                     eventNotHappenedPerson = eventNotHappenedState.persons[personIndex]
 
                     arrivalLocation = Info.locations[person.nextLocationName]
-                    #print(arrivalLocation.name, arrivalLocation.schedule)
-                    #print(person.currentBus, person.currentBusNr, person.previousLocationName, person.nextLocationName)
-                    #print("parent", self.parentState.persons[0])
+
                     busesList = arrivalLocation.schedule[minDecisionTime]
 
                     # gasesc autobuzul curent in schedule ul locatiei
@@ -605,6 +603,10 @@ class State:
                         eventHappenedState.hval = heuristicFct(eventHappenedState)
 
                         nextStates.append(eventHappenedState)
+
+                    if len(nextStates) < 2:
+                        return None
+                    return nextStates
 
             elif person.personalState == "IN STATIE":
 
@@ -694,6 +696,10 @@ class State:
                                 eventHappenedState.hval = heuristicFct(eventHappenedState)
 
                                 nextStates.append(eventHappenedState)
+
+                if len(nextStates) < 2:
+                    return None
+                return nextStates
 
         if not nextStates:
             return None
@@ -839,13 +845,18 @@ def astar(heuristicFct, timeout, NSOL=Info.NSOL):
 
     while not openStates.empty():
 
+        currentState = openStates.getMin()
+
         if time.time() - startTime > timeout:
 
-            output.write(f"no solution found in {timeout} seconds")
+            output.write(f"no solution found in {timeout} seconds; printing left stations for every person\n")
+
+            for person in currentState.persons:
+                output.write(str(person))
+                output.write('\n')
+
             output.close()
             return
-
-        currentState = openStates.getMin()
 
         if currentState.isFinalState():
 
@@ -922,12 +933,12 @@ def astarOpenClosed(heuristicFct, timeout, NSOL=Info.NSOL):
                     openStates.push(nextState)
 
                 elif nextState in openStates.pos.keys() and (State.cmp(nextState, openStates.heap[openStates.pos[nextState]]) is True):
-
+                    print("here0")
                     openStates.pop(nextState)
                     openStates.push(nextState)
 
                 elif nextState in closedStates.keys() and (State.cmp(nextState, closedStates[nextState]) is True):
-
+                    print("here")
                     closedStates.pop(nextState)
                     openStates.push(nextState)
 
@@ -942,7 +953,7 @@ def astarOpenClosed(heuristicFct, timeout, NSOL=Info.NSOL):
 
 
 Info.parseInput()
-astarOpenClosed(State.UCS, 120)
+astarOpenClosed(State.UCS, 30)
 
 
 
