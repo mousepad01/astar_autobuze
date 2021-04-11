@@ -1,5 +1,5 @@
 import copy
-import itertools
+import time
 
 
 class PriorityQueue:
@@ -279,6 +279,15 @@ class Info:
     START_TIME = 0  # START_TIME si END_TIME intervalul zilei
     END_TIME = 0
 
+    NSOL = 1
+
+    # pentru euristici
+    MIN_BUS_PRICE = float('inf')
+    MAX_BUS_PRICE = -1
+
+    # tot pt euristici
+    MIN_BUS_TRAVEL_TIME = float('inf')
+
     @classmethod
     def parseHours(cls, l):
 
@@ -314,6 +323,15 @@ class Info:
 
             bus = BusType(int(props[0]), float(props[1][:-3]), int(props[2][:-3]), int(props[3][:-3]))
             cls.buses.update({bus.id: bus})
+
+            if cls.MIN_BUS_PRICE > bus.price:
+                cls.MIN_BUS_PRICE = bus.price
+
+            if cls.MAX_BUS_PRICE < bus.price:
+                cls.MAX_BUS_PRICE = bus.price
+
+            if cls.MIN_BUS_TRAVEL_TIME > bus.timeBetweenLocations:
+                cls.MIN_BUS_TRAVEL_TIME = bus.timeBetweenLocations
 
             for loc in b:
                 loc = loc[1:-1]
@@ -405,24 +423,23 @@ class State:
         self.parentState = None
 
         self.hval = 0
-        self.gval = 0
+        self.gtime = 0
+        self.gmoney = 0
 
-        self.nextNodes = set()
+        self.nextNodes = []     # [state, ...]
 
         self.printStatus = ""
 
-    @staticmethod
-    def cartesianProduct(n):
+    def __hash__(self):
+        return hash(self.getStateKey())
 
-        k = [[0, 1] for _ in range(n)]
-
-        for c in itertools.product(*k):
-            yield c
+    def __eq__(self, other):
+        return self.getStateKey() == other.getStateKey()
 
     def isFinalState(self):
         return self.persons == []
 
-    def nextStateGenerator(self):
+    def nextStateGenerator(self, heuristicFct):
 
         # calculez cel mai apropiat moment de decizie dintre toate disponibile (ex daca sa coboare sau nu etc)
         # incepand cu momentul curent (self.currentMinute)
@@ -528,6 +545,8 @@ class State:
 
                     eventNotHappenedState.currentMinute = minDecisionTime
                     eventNotHappenedState.parentState = self
+                    eventNotHappenedState.gtime += minDecisionTime - self.currentMinute
+                    eventNotHappenedState.hval = heuristicFct(eventNotHappenedState)
 
                     nextStates.append(eventNotHappenedState)
 
@@ -580,6 +599,8 @@ class State:
 
                         eventHappenedState.currentMinute = minDecisionTime
                         eventHappenedState.parentState = self
+                        eventHappenedState.gtime += minDecisionTime - self.currentMinute
+                        eventHappenedState.hval = heuristicFct(eventHappenedState)
 
                         nextStates.append(eventHappenedState)
 
@@ -606,6 +627,8 @@ class State:
 
                     eventNotHappenedState.currentMinute = minDecisionTime
                     eventNotHappenedState.parentState = self
+                    eventNotHappenedState.gtime += minDecisionTime - self.currentMinute
+                    eventNotHappenedState.hval = heuristicFct(eventNotHappenedState)
 
                     nextStates.append(eventNotHappenedState)
 
@@ -664,40 +687,259 @@ class State:
 
                                 eventHappenedState.currentMinute = minDecisionTime
                                 eventHappenedState.parentState = self
+                                eventHappenedState.gtime += minDecisionTime - self.currentMinute
+                                eventHappenedState.gmoney += Info.buses[busSch[0]].price
+                                eventHappenedState.hval = heuristicFct(eventHappenedState)
 
                                 nextStates.append(eventHappenedState)
 
-    def printPath(self):
-
-        print(self.printStatus)
+    def printPath(self, output):
 
         if self.parentState is not None:
             self.parentState.printPath()
 
+        output.write(self.printStatus)
+
+    def getFval(self):
+        return self.gmoney + self.gtime + self.hval
+
+    # metoda folosita pentru a verifica daca doua stari sunt egale
+    # voi lua in calcul doar persoanele din stare, iar din persoane la randul lor
+    # doar anumite atribute
+    # metoda va fi folosita pentru a* cand verific daca deja am mai ajuns odata in acea stare
+    # va returna un string al proprietatilor, care va fi folosita pentru a calcula hash ul starii
+    def getStateKey(self):
+
+        keyString = ""
+
+        # trebuie sa ma asigur ca voi construi string ul cheie
+        # cu persoanele in aceeasi ordine
+        # le voi sorta dupa nume, presupunand ca au nume distincte
+
+        auxPersons = copy.deepcopy(self.persons)
+        auxPersons.sort(key=lambda e : e.name)
+
+        for person in auxPersons:
+
+            keyString += person.name
+            keyString += str(person.money)
+            keyString += str(person.personalRoute)
+            keyString += person.personalState
+
+            if person.personalState == "PE TRASEU":
+
+                keyString += str(person.timeForArrival - self.currentMinute) # ma intereseaza doar distanta relativa fata de destinatie
+                keyString += str(person.currentBus)
+                keyString += str(person.currentBusNr)
+                keyString += person.previousLocationName
+                keyString += person.nextLocationName
+
+            elif person.personalState == "IN STATIE":
+
+                keyString += person.currentLocationName
+                keyString += str(person.allowedBuses.keys())
+
+            keyString += "_"
+
+        return keyString
+
     @staticmethod
     def cmp(fstState, sndState):
-        return (fstState.gval + fstState.hval) < (sndState.gval + sndState.hval)
+        return (fstState.gtime + fstState.gmoney + fstState.hval) < (sndState.gtime + sndState.gmoney + sndState.hval)
+
+    @staticmethod
+    def UCS(_):
+        return 0
+
+    # euristica banala
+    # returneaza numarul de oameni care nu si au terminat traseul
+    @staticmethod
+    def simpleHeuristic(state):
+        return len(state.persons)
+
+    # prima euristica admisibila
+    # fac o suma, pentru fiecare om adun la suma
+    # (nr statii ramase de parcurs - 1) * pret minim pe bilet
+    # este admisibila deoarece
+    # reprezinta exact costul cand o persoana
+    # este intr un autobuz presupus de timp de calatorie intre statii 0
+    # si cu pretul minim dintre toate autobuzele
+    # si toate statiile de pe drum sunt fix cele ramase din traseu (le fiecare coboara si urca instantaneu inapoi)
+    @staticmethod
+    def fstAdmHeuristic(state):
+
+        h = 0
+        for person in state.persons:
+            h += Info.MIN_BUS_PRICE * (len(person.personalRoute) - 1)
+
+        return h
+
+    # a doua euristica admisibila
+    # aproape la fel ca prima
+    # dar iau in calcul si timpul intre statii
+    # cea mai potrivita euristica dintre toate prezentate
+    # este admisibila deoarece
+    # reprezinta exact costul cand o persoana este in autobuzul cu timp minim si cu pretul minim
+    # dintre toate autobuzele (presupunand ca cel cu cost minim are si timp minim de parcurgere intre statii)
+    # si toate statiile de pe drum sunt fix cele ramase din traseu (le fiecare coboara si urca instantaneu inapoi)
+    @staticmethod
+    def sndAdmHeuristic(state):
+
+        h = 0
+        for person in state.persons:
+            h += Info.MIN_BUS_PRICE * (len(person.personalRoute) - 1)
+            h += Info.MIN_BUS_TRAVEL_TIME * (len(person.personalRoute) - 1)
+
+        return h
+
+    # euristica neadmisibila
+    # fac o suma, pentru fiecare om adun la suma
+    # (nr statii ramase de parcurs) * pret MAXIM pe bilet
+    # nu este admisibila, dau un contraexemplu
+    # cand am toate autobuzele cu cost 1, si unul cu cost 10000000
+    # iar cel putin o parte din calatori vor folosi doar autobuze de cost 1
+    # euristica va intoarce cel mai probabil o valoare mult mai mare fata de valoarea reala a drumului
+    @staticmethod
+    def notAdmHeuristic(state):
+
+        h = 0
+        for person in state.persons:
+            h += Info.MAX_BUS_PRICE * len(person.personalRoute)
+
+        return h
 
 
-def astar():
+# am folosit totusi openset optimizat
+# dar nu am mai folosit closedset
+# am optimizat openset pentru ca 1. nu exista nici un motiv pentru care sa nu il optimizez
+#                                2. functiile de hash si eq sunt adaptate pentru astarOpenClosed si ar aparea probleme aici
+def astar(heuristicFct, timeout, NSOL=Info.NSOL):
+
+    startTime = time.time()
+    output = open("astar" + str(Info.NSOL) + ".txt", "w")
+
+    if NSOL <= 0:
+        return
 
     startState = State(0, Info.persons)
 
     openStates = PriorityQueue([startState], State.cmp)
 
+    while not openStates.empty():
+
+        if time.time() - startTime > timeout:
+            output.write(f"no solution found in {timeout} seconds")
+            output.close()
+            break
+
+        currentState = openStates.getMin()
+
+        if currentState.isFinalState():
+
+            currentState.printPath(output)
+
+            NSOL -= 1
+            if NSOL == 0:
+                return
+
+        currentState.nextNodes = currentState.nextStateGenerator(heuristicFct)
+        if currentState.nextNodes is not None:
+            for nextState in currentState.nextNodes:
+
+                if nextState not in openStates.pos.keys():
+                    openStates.push(currentState)
+
+                elif nextState in openStates.pos.keys() and State.cmp(nextState, openStates.pos[nextState]):
+
+                    openStates.pop(nextState)
+                    openStates.push(nextState)
+
+    output.write("no solution found")
+    output.close()
 
 
+def astarOpenClosed(heuristicFct, timeout, NSOL=Info.NSOL):
+
+    startTime = time.time()
+    output = open("astarOpenClosed" + str(Info.NSOL) + ".txt", "w")
+
+    if NSOL <= 0:
+        return
+
+    startState = State(0, list(Info.persons.values()))
+
+    openStates = PriorityQueue([startState], State.cmp)
+    closedStates = {}   # {state: state}    -- functia de hash cuprinde in mod intentionat doar o parte din atribute
+                        #                      prin functia getStateKey
+                        #                      deci are sens sa am un astfel de dictionar
+
+    while not openStates.empty():
+
+        if time.time() - startTime > timeout:
+            output.write(f"no solution found in {timeout} seconds")
+            output.close()
+            break
+
+        currentState = openStates.getMin()
+
+        closedStates.update({currentState: currentState})
+
+        if currentState.isFinalState():
+
+            currentState.printPath(output)
+
+            NSOL -= 1
+            if NSOL == 0:
+                return
+        print("here")
+        currentState.nextNodes = currentState.nextStateGenerator(heuristicFct)
+        if currentState.nextNodes is not None:
+
+            for nextState in currentState.nextNodes:
+
+                if nextState not in openStates.pos.keys() and nextState not in closedStates.keys():
+                    openStates.push(currentState)
+
+                elif nextState in openStates.pos.keys() and State.cmp(nextState, openStates.pos[nextState]):
+
+                    openStates.pop(nextState)
+                    openStates.push(nextState)
+
+                elif nextState in closedStates.keys() and State.cmp(nextState, closedStates[nextState]):
+
+                    closedStates.pop(nextState)
+                    openStates.push(nextState)
+
+    output.write("no solution found")
+    output.close()
+
+
+#def idastar(heuristicFct, timeout, NSOL=Info.NSOL):
+
+
+#----------------------------------------------------------------
 
 Info.parseInput()
+astarOpenClosed(State.UCS, 10)
 
-for l in Info.locations.keys():
-    print(Info.locations[l])
 
-for p in Info.persons.keys():
-    print(Info.persons[p])
 
-for b in Info.buses.keys():
-    print(Info.buses[b])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
