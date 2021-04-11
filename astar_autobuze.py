@@ -19,7 +19,7 @@ class PriorityQueue:
 
         self.cmp = compareFunction
 
-        self.__heap = [None]
+        self.heap = [None]
         for newElement in initArr:
             try:
                 self.push(newElement)
@@ -29,27 +29,27 @@ class PriorityQueue:
     def __repr__(self):
 
         st = ''
-        for el in self.__heap[1:]:
+        for el in self.heap[1:]:
             st += repr(el) + ' '
 
         return st[:-1]
 
     def __swapElsByPos(self, pos1, pos2):
 
-        aux = self.__heap[pos1]
-        self.__heap[pos1] = self.__heap[pos2]
-        self.__heap[pos2] = aux
+        aux = self.heap[pos1]
+        self.heap[pos1] = self.heap[pos2]
+        self.heap[pos2] = aux
 
-        self.pos[self.__heap[pos2]] = pos2
-        self.pos[self.__heap[pos1]] = pos1
+        self.pos[self.heap[pos2]] = pos2
+        self.pos[self.heap[pos1]] = pos1
 
     def push(self, element):
 
         if element in self.pos.keys():
             raise ValueError(f"element already in the queue on heap array position {self.pos[element]}")
 
-        self.__heap.append(element)
-        self.pos.update({element: len(self.__heap) - 1})
+        self.heap.append(element)
+        self.pos.update({element: len(self.heap) - 1})
 
         self.heapify(element)
 
@@ -60,11 +60,11 @@ class PriorityQueue:
         except KeyError as kerr:
             raise ValueError(f"eroare la ordonarea heap-ului la rearanjare: {kerr}")
 
-        while elPos > 1 and not self.cmp(self.__heap[elPos // 2], self.__heap[elPos]):
+        while elPos > 1 and not self.cmp(self.heap[elPos // 2], self.heap[elPos]):
             self.__swapElsByPos(elPos, elPos // 2)
             elPos //= 2
 
-        heapSize = len(self.__heap)
+        heapSize = len(self.heap)
 
         done = False
         while not done:
@@ -74,7 +74,7 @@ class PriorityQueue:
 
             elif elPos * 2 < heapSize <= elPos * 2 + 1:
 
-                if self.cmp(self.__heap[elPos], self.__heap[elPos * 2]):
+                if self.cmp(self.heap[elPos], self.heap[elPos * 2]):
                     done = True
                 else:
                     self.__swapElsByPos(elPos, elPos * 2)
@@ -82,12 +82,12 @@ class PriorityQueue:
 
             else:
 
-                if self.cmp(self.__heap[elPos], self.__heap[elPos * 2 + 1]) and self.cmp(self.__heap[elPos],
-                                                                                       self.__heap[elPos * 2]):
+                if self.cmp(self.heap[elPos], self.heap[elPos * 2 + 1]) and self.cmp(self.heap[elPos],
+                                                                                       self.heap[elPos * 2]):
                     done = True
                 else:
 
-                    if self.cmp(self.__heap[elPos * 2], self.__heap[elPos * 2 + 1]):
+                    if self.cmp(self.heap[elPos * 2], self.heap[elPos * 2 + 1]):
                         self.__swapElsByPos(elPos, elPos * 2)
                         elPos *= 2
                     else:
@@ -96,10 +96,10 @@ class PriorityQueue:
                         elPos += 1
 
     def peekMin(self):
-        return copy.deepcopy(self.__heap[1])
+        return copy.deepcopy(self.heap[1])
 
     def getMin(self):
-        return self.pop(self.__heap[1])
+        return self.pop(self.heap[1])
 
     def pop(self, element):
 
@@ -108,21 +108,21 @@ class PriorityQueue:
         except KeyError as kerr:
             raise ValueError(f"eroare la ordonarea heap-ului la stergere: {kerr}")
 
-        heapSize = len(self.__heap)
+        heapSize = len(self.heap)
 
         self.__swapElsByPos(elPos, heapSize - 1)
 
-        popped = self.__heap.pop(-1)
+        popped = self.heap.pop(-1)
         self.pos.pop(popped)
         heapSize -= 1
 
         if not self.empty() and elPos < heapSize:
-            self.heapify(self.__heap[elPos])
+            self.heapify(self.heap[elPos])
 
         return popped
 
     def empty(self):
-        if len(self.__heap) == 1:
+        if len(self.heap) == 1:
             return True
         return False
 
@@ -241,8 +241,8 @@ class Person:
                                             # pentru a evita intersectia persoanelor
 
         self.currentLocationName = None     # daca asteapta, statia curenta
-        self.allowedBuses = {}  # pentru cazul cand asteapta in statie, si a refuzat sa ia un autobuz, il elimin
-                                # {autobuz.id: autobuz}
+        self.allowedBuses = set()  # pentru cazul cand asteapta in statie, si a refuzat sa ia un autobuz, il elimin
+                                   # {autobuz.id: autobuz}
 
         # PRECIZARI:
         #
@@ -406,7 +406,7 @@ class Info:
 
                 person.personalRoute.append(loc)
 
-            person.allowedBuses = copy.deepcopy(cls.locations[person.personalRoute[0]].buses)
+            person.allowedBuses = set(cls.locations[person.personalRoute[0]].buses.keys())
             person.personalState = "IN STATIE"
             person.currentLocationName = person.personalRoute[0]
             person.personalRoute.pop(0)     # prima statie e eliminata deoarece incepe din ea
@@ -461,7 +461,7 @@ class State:
         # adica daca a asteptat in statie si a refuzat toate autobuzele
 
         for person in self.persons:
-            if bool(person.allowedBuses) is False:
+            if person.personalState == "IN STATIE" and bool(person.allowedBuses) is False:
                 return None
 
         # calculez cel mai apropiat eveniment (cele mai apropiate daca sunt mai multe cu timp minim)
@@ -493,7 +493,7 @@ class State:
                     if minute in currentLocation.schedule.keys():
                         for busInfo in currentLocation.schedule[minute]:
 
-                            if busInfo[0] in person.allowedBuses.keys():
+                            if busInfo[0] in person.allowedBuses:
 
                                 minDecisionTime = minute
                                 found = True
@@ -505,7 +505,7 @@ class State:
         # daca cel mai apropiat moment de decizie ar depasi
         # finalul zilei, inseamna ca nu mai pot avea succesori
 
-        if minDecisionTime < Info.END_TIME or minDecisionTime == float('inf'):
+        if minDecisionTime > Info.END_TIME or minDecisionTime == float('inf'):
             return None
 
         nextStates = []
@@ -517,8 +517,9 @@ class State:
         for personIndex in range(len(self.persons)):
 
             person = self.persons[personIndex]
-
+            #print(person.personalState)
             if person.personalState == "PE TRASEU":
+
                 if person.timeForArrival == minDecisionTime:
 
                     # mai intai ma ocup de eventNotHappenedState
@@ -529,19 +530,20 @@ class State:
                     eventNotHappenedPerson = eventNotHappenedState.persons[personIndex]
 
                     arrivalLocation = Info.locations[person.nextLocationName]
-                    busesList = arrivalLocation[minDecisionTime].schedule
+                    #print(arrivalLocation.name, arrivalLocation.schedule)
+                    #print(person.currentBus, person.currentBusNr, person.previousLocationName, person.nextLocationName)
+                    #print("parent", self.parentState.persons[0])
+                    busesList = arrivalLocation.schedule[minDecisionTime]
 
                     # gasesc autobuzul curent in schedule ul locatiei
                     busSch = None  # (bus id, bus nr, previous location, next location)
-                    for bk in busesList.keys():
-                        b = busesList[bk]
-
+                    for b in busesList:
                         if b[0] == person.currentBus and b[2] == person.previousLocationName:
                             busSch = b
 
-                    eventNotHappenedPerson.previousLocationName = arrivalLocation
+                    eventNotHappenedPerson.previousLocationName = arrivalLocation.name
                     eventNotHappenedPerson.nextLocationName = busSch[3]
-                    eventNotHappenedPerson.timeForArrival = Info.buses[busSch[0]].timeBetweenLocations + self.currentMinute
+                    eventNotHappenedPerson.timeForArrival = Info.buses[busSch[0]].timeBetweenLocations + minDecisionTime
 
                     eventNotHappenedState.currentMinute = minDecisionTime
                     eventNotHappenedState.parentState = self
@@ -581,12 +583,12 @@ class State:
                             eventHappenedState.persons.pop(personIndex)
 
                             eventHappenedState.printStatus += f"persoana {eventHappenedPerson.name} a coborat in statia" \
-                                                              f"{eventHappenedPerson.nextLocationName} si si-a terminat traseul\n"
+                                                              f" {eventHappenedPerson.nextLocationName} si si-a terminat traseul\n"
 
                         else:
                             eventHappenedPerson.personalState = "IN STATIE"
                             eventHappenedPerson.currentLocationName = eventHappenedPerson.nextLocationName
-                            eventHappenedPerson.allowedBuses = copy.deepcopy(arrivalLocation.buses)
+                            eventHappenedPerson.allowedBuses = set(arrivalLocation.buses.keys())
 
                             eventHappenedPerson.timeForArrival = 0
                             eventHappenedPerson.currentBus = None
@@ -595,7 +597,7 @@ class State:
                             eventHappenedPerson.previousLocationName = None
 
                             eventHappenedState.printStatus += f"persoana {eventHappenedPerson.name} a coborat in statia" \
-                                                              f"{eventHappenedPerson.nextLocationName}\n"
+                                                              f" {eventHappenedPerson.currentLocationName}\n"
 
                         eventHappenedState.currentMinute = minDecisionTime
                         eventHappenedState.parentState = self
@@ -620,9 +622,9 @@ class State:
 
                     allBusesSch = busesList[minDecisionTime]  # [(bus id, bus nr, previous location, next location)]
                     for busSch in allBusesSch:
-                        if busSch[0] in eventNotHappenedPerson.allowedBuses.keys():
+                        if busSch[0] in eventNotHappenedPerson.allowedBuses:
 
-                            eventNotHappenedPerson.allowedBuses.pop(busSch[0])
+                            eventNotHappenedPerson.allowedBuses.remove(busSch[0])
                             break
 
                     eventNotHappenedState.currentMinute = minDecisionTime
@@ -635,7 +637,7 @@ class State:
                     # acum tratez cazul cand (vrea sa) ia un autobuz
 
                     for busSch in allBusesSch:
-                        if busSch[0] in person.allowedBuses.keys():
+                        if busSch[0] in person.allowedBuses:
 
                             canTakeBus = True
 
@@ -665,14 +667,14 @@ class State:
                                 eventHappenedPerson.money -= Info.buses[busSch[0]].price
 
                                 eventHappenedPerson.personalState = "PE TRASEU"
-                                eventHappenedPerson.timeForArrival = self.currentMinute + Info.buses[busSch[0]].timeBetweenLocations
+                                eventHappenedPerson.timeForArrival = minDecisionTime + Info.buses[busSch[0]].timeBetweenLocations
                                 eventHappenedPerson.currentBus = busSch[0]
                                 eventHappenedPerson.currentBusNr = busSch[1]
                                 eventHappenedPerson.nextLocationName = busSch[3]
-                                eventHappenedPerson.previousLocationName = busSch[2]
+                                eventHappenedPerson.previousLocationName = eventHappenedPerson.currentLocationName
 
                                 eventHappenedPerson.currentLocationName = None
-                                eventHappenedPerson.allowedBuses = {}
+                                eventHappenedPerson.allowedBuses = set()
 
                                 # cateva procesari pentru afisare
 
@@ -681,7 +683,7 @@ class State:
 
                                 eventHappenedState.printStatus += f"persoana {eventHappenedPerson.name} a urcat in" \
                                                                   f"autobuzul cu numarul {busSch[0]} care are ruta" \
-                                                                  f"{remainingRouteForPrinting};"
+                                                                  f"{remainingRouteForPrinting};\n"
 
                                 # -----------
 
@@ -693,10 +695,15 @@ class State:
 
                                 nextStates.append(eventHappenedState)
 
+        if not nextStates:
+            return None
+        else:
+            return nextStates
+
     def printPath(self, output):
 
         if self.parentState is not None:
-            self.parentState.printPath()
+            self.parentState.printPath(output)
 
         output.write(self.printStatus)
 
@@ -731,13 +738,18 @@ class State:
                 keyString += str(person.timeForArrival - self.currentMinute) # ma intereseaza doar distanta relativa fata de destinatie
                 keyString += str(person.currentBus)
                 keyString += str(person.currentBusNr)
-                keyString += person.previousLocationName
+
+                if person.previousLocationName is None:
+                    keyString += "None"
+                else:
+                    keyString += person.previousLocationName
+
                 keyString += person.nextLocationName
 
             elif person.personalState == "IN STATIE":
 
                 keyString += person.currentLocationName
-                keyString += str(person.allowedBuses.keys())
+                keyString += str(person.allowedBuses)
 
             keyString += "_"
 
@@ -821,16 +833,17 @@ def astar(heuristicFct, timeout, NSOL=Info.NSOL):
     if NSOL <= 0:
         return
 
-    startState = State(0, Info.persons)
+    startState = State(Info.START_TIME, list(Info.persons.values()))
 
     openStates = PriorityQueue([startState], State.cmp)
 
     while not openStates.empty():
 
         if time.time() - startTime > timeout:
+
             output.write(f"no solution found in {timeout} seconds")
             output.close()
-            break
+            return
 
         currentState = openStates.getMin()
 
@@ -844,12 +857,13 @@ def astar(heuristicFct, timeout, NSOL=Info.NSOL):
 
         currentState.nextNodes = currentState.nextStateGenerator(heuristicFct)
         if currentState.nextNodes is not None:
+
             for nextState in currentState.nextNodes:
 
                 if nextState not in openStates.pos.keys():
-                    openStates.push(currentState)
+                    openStates.push(nextState)
 
-                elif nextState in openStates.pos.keys() and State.cmp(nextState, openStates.pos[nextState]):
+                elif nextState in openStates.pos.keys() and State.cmp(nextState, openStates.heap[openStates.pos[nextState]]):
 
                     openStates.pop(nextState)
                     openStates.push(nextState)
@@ -866,7 +880,7 @@ def astarOpenClosed(heuristicFct, timeout, NSOL=Info.NSOL):
     if NSOL <= 0:
         return
 
-    startState = State(0, list(Info.persons.values()))
+    startState = State(Info.START_TIME, list(Info.persons.values()))
 
     openStates = PriorityQueue([startState], State.cmp)
     closedStates = {}   # {state: state}    -- functia de hash cuprinde in mod intentionat doar o parte din atribute
@@ -875,37 +889,44 @@ def astarOpenClosed(heuristicFct, timeout, NSOL=Info.NSOL):
 
     while not openStates.empty():
 
-        if time.time() - startTime > timeout:
-            output.write(f"no solution found in {timeout} seconds")
-            output.close()
-            break
-
         currentState = openStates.getMin()
+
+        if time.time() - startTime > timeout:
+
+            output.write(f"no solution found in {timeout} seconds; printing left stations for every person\n")
+
+            for person in currentState.persons:
+                output.write(str(person))
+                output.write('\n')
+
+            output.close()
+            return
 
         closedStates.update({currentState: currentState})
 
         if currentState.isFinalState():
 
+            output.write(f"stare finala atinsa: cost timp {currentState.gtime}, cost bani {currentState.gmoney}\n")
             currentState.printPath(output)
 
             NSOL -= 1
             if NSOL == 0:
                 return
-        print("here")
+
         currentState.nextNodes = currentState.nextStateGenerator(heuristicFct)
         if currentState.nextNodes is not None:
 
             for nextState in currentState.nextNodes:
 
                 if nextState not in openStates.pos.keys() and nextState not in closedStates.keys():
-                    openStates.push(currentState)
+                    openStates.push(nextState)
 
-                elif nextState in openStates.pos.keys() and State.cmp(nextState, openStates.pos[nextState]):
+                elif nextState in openStates.pos.keys() and (State.cmp(nextState, openStates.heap[openStates.pos[nextState]]) is True):
 
                     openStates.pop(nextState)
                     openStates.push(nextState)
 
-                elif nextState in closedStates.keys() and State.cmp(nextState, closedStates[nextState]):
+                elif nextState in closedStates.keys() and (State.cmp(nextState, closedStates[nextState]) is True):
 
                     closedStates.pop(nextState)
                     openStates.push(nextState)
@@ -919,8 +940,9 @@ def astarOpenClosed(heuristicFct, timeout, NSOL=Info.NSOL):
 
 #----------------------------------------------------------------
 
+
 Info.parseInput()
-astarOpenClosed(State.UCS, 10)
+astarOpenClosed(State.UCS, 120)
 
 
 
